@@ -1,0 +1,14 @@
+*.csv 
+.idea/* 
+.idea 
+.idea/ 
+CPM/__pycache__/ 
+CPM/__pycache__/* 
+*.txt 
+*.txt 
+*.log 
+*.csv 
+/output/* 
+/outputs/* 
+/__pycache__/ 
+common/__pycache__/ 
