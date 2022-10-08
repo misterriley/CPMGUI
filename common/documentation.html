@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<i>CPMGUI</i> v0.1<br>
+GUI and integration by Steven Riley, CPM Code by Fengdan Ye<br>
+Published 10/2022<br>
+<br>
+1. Introduction<br>
+<i>CPMGUI</i> is a graphical user interface for Connectome-Based Predictive Modeling. It is written in Python and uses the
+<i>PyQt5</i> library for GUI elements. It is designed to be a simple and easy to use interface for the CPM code. It is not
+designed to be a replacement for the CPM code, but rather a tool to make it easier to use.<br>
+<br>
+2. Installation<br>
+<i>CPMGUI</i> is written in Python and uses the <i>PyQt5</i> library. Installation is performed by <i>PyInstaller</i>.
+If you're reading this then you already have it installed.<br>
+<br>
+3. Usage<br>
+<i>CPMGUI</i> is designed to be simple and easy to use. It is split into four main sections, which are displayed in tabs.
+The first tab is the "Input" tab. This is where you input where the data comes from. The second tab is the "Parameters"
+tab. This is where the parameters that determine runtime behavior are set. The third tab is the "Output" tab. This is
+where you set the location of the created output tabs. The fourth tab is the "Run" tab. This is where you check the
+settings and run the code.<br>
+<br>
+3.1 Input<br>
+The input tab is where you set the location of the input data. There are three sections: "Connectivity Matrices",
+"Behavioral Data", and "Subject Key".<br>
+<br>
+3.1.1 Connectivity Matrices<br>
+The connectivity matrices section is where you set the location of the connectivity matrices. A file is required to run CPM.
+You can use the "Browse" button to select the file. The file must have the .mat suffix and be a matlab file.
+The file must contain a list of square matrices of dimension <i>v</i> x <i>v</i> x <i>n</i>, where <i>v</i> is the
+number of vertices and <i>n</i> is the number of subjects. If there is only one variable in the file, then this variable
+will be assumed to be the connectivity matrices. If there are multiple variables, then set the name of the variable
+containing the connectivity matrices in the "Connectivity Matrices Variable Name" box.<br>
+<br>
+3.1.2 Behavioral Data<br>
+The behavioral data section is where you set the location of the behavioral data. A file is optional. If you do not
+specify a file, it will be assumed that the Connectivity Matrices File also contains the behavioral data of interest. In
+this case, specify the name of the behavioral variable in the "Behavioral Data Variable Name" box. If you do specify a
+file containing the behavioral data, then the file may either be a .mat file, a .xlsx file, or a csv file with suffix .csv or .txt. If
+there is only one variable in this file, then this variable will be assumed to be the behavioral data. If there are
+multiple variables, then set the name of the variable containing the behavioral data in the "Behavioral Data Variable Name"
+box. CSV FILES ARE ASSUMED TO HAVE HEADERS. IF THERE IS AN OFF-BY-ONE ERROR THIS IS PROBABLY THE CAUSE. CHANGING THE
+SUFFIX TO .TXT WILL SOLVE THE PROBLEM.<br>
+<br>
+3.1.3 Subject Key<br>
+The subject key section is where you set the location of the subject key. A file is optional. If you do not specify a file,
+it will be assumed that the Connectivity Matrices File also contains the subject key. In this case, specify the name of the
+subject key variable in the "Subject Key Variable Name" box. If you do specify a file containing the subject key, then the
+file may either be a .mat file, a .xlsx file, or a csv file with suffix .csv or .txt. If there is only one variable in this file, then this
+variable will be assumed to be the subject key. If there are multiple variables, then set the name of the variable containing
+the subject key in the "Subject Key Variable Name" box.<br>
+<br>
+3.2 Parameters<br>
+The parameters tab is where you set the parameters that determine runtime behavior. All fields must be set to a valid
+value. If a field is not set to a valid value, then the code will not run. The parameters are as follows:<br>
+<br>
+* Time index: The time index of the connectivity matrices to use. This must be an integer between 1 and n, where n is the
+number of time points in the connectivity matrices. If there is only one time point of interest in the connectivity
+matrices file, then this parameter is not used.<br>
+* K Folds: The number of folds to use in cross validation. This must be an integer between 1 and n, where n is the number
+of subjects.<br>
+* P Threshold: The threshold for detecting significant edges. This must be a float between 0 and 1. Typically, 0.05 or 0.01
+is used.<br>
+* Repeats: The number of times to repeat the cross validation with different random seeds on the raw data. This must be an
+integer.<br>
+* Permuted Repeats: The number of times to repeat the cross validation with different random seeds on the permuted data.
+* Permuted data reassigns the behavioral data to the subjects randomly. This must be an integer.<br>
+* Z-score: Whether to apply a Fisher z-score transformation to the connectivity matrices. If checked, then the
+connectivity matrices will be transformed. If not checked, then the connectivity matrices will not be transformed.<br>
+* Mode: The mode to use for the CPM code. If "linear" is selected, then the CPM code will use linear regression. If "ridge" is
+selected, then the CPM code will use ridge regression. If "logistic" is selected, then the CPM code will use logistic
+regression (for binary data). WARNING: "logistic" mode is not yet implemented.<br>
+* Jobs: The number of jobs to use for parallel processing. This must be a positive integer. It is suggested to use a
+value between 1 and half the number of cores on your computer. It defaults to x/3, where x is the number of cores.
+If you set this to 1, then the code will not use parallel processing. If you set this to a value greater than 1, then
+the code will use parallel processing. If you set this to a value equal to or greater than the number of cores, then the code will
+likely freeze your computer.<br>
+<br>
+3.3 Output<br>
+The output tab is where you set the location of the output. Select the location of the parent folder where the output
+folder should be created. The output folder will be created in the parent folder with a procedurally generated name that
+indicates the date, number of folds, threshold, repeats, permuted repeats, timepoint, z-score, mode, and originating
+connectivity matrices file.<br>
+<br>
+3.4 Run<br>
+The run tab is where you check the settings and run the code. The settings are displayed in a table once the "Run"
+button is pressed. If the settings are correct, then press the "Ok" button to run the code. If the settings are not correct,
+then press the "Cancel" button to return to the other tabs. When the code is running, the "Run" button will be replaced
+with a button titled "Running..." and will be disabled. When the code is finished running, the "Running..." button will
+be replaced with a button titled "Run" and will be enabled. While running, the <i>CPMGUI</i> will not be responsive.<br>
+<br>
+4. Logs<br>
+<i>CPMGUI</i> will create a log file for every run. The log file will be created in the logs folder under the directory from
+which <i>CPMGUI</i> was run. The log file will be named with the time of the run. The log file will output any information
+that is printed to the console. This includes information about the run, warnings, and errors. The log file will also
+display any unexpected errors that were not caught by the code. If you encounter an error, please send the log file
+to the author, steven.riley@yale.edu.<br>
+<br>
+5. License<br>
+<i>CPMGUI</i> is licensed under the GNU General Public License v3.0. See the LICENSE file for more information.<br>
+<br>
+6. Acknowledgements<br>
+<i>CPMGUI</i> was developed by Steven Riley at the Yale School of Medicine. The python version of CPM code used in this paper
+was developed by Fengdan Ye. The original implementation can be found at https://github.com/YaleMRRC/CPM and was
+published in [1].<br>
+<br>
+The <i>CPMGUI</i> was developed using the following software:<br>
+<i>PyQt5<br>
+PyInstaller<br>
+Python 3.8<br>
+PyCharm<br>
+GitHub Copilot<br>
+GitHub Community Edition<br></i>
+<br>
+7. Contact<br>
+Steven Riley - steven.riley@yale.edu<br>
+<br>
+8. References<br>
+[1] Shen, X., Finn, E., Scheinost, D. et al. Using connectome-based predictive modeling to predict individual behavior from
+brain connectivity. Nat Protoc 12, 506-518 (2017). https://doi.org/10.1038/nprot.2016.178<br>
+<br>
+9. Changelog<br>
+v0.1 - Initial release, 10/7/2022<br>
+</body>
+</html>

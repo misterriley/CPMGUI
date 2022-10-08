@@ -2,14 +2,14 @@ import logging
 
 from scipy import stats
 import random
-from CPM.utils import *
+from utils import *
 from sklearn import preprocessing
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import Ridge
 
 
-def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear'):
+def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear', log=None):
     """
     Train CPM model given a training set.
     :param train_mat: flattened training feature matrix of size (v*(v-1)/2, n), where v is the number of nodes, and n is the number of subjects.
@@ -30,11 +30,14 @@ def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear'):
         neg_edges: (v, v) matrix with significant negative edges set to 1 and 0 otherwise.
     :rtype: (sklearn estimator, sklearn estimator, sklearn estimator, NumPy Array, NumPy Array)
     """
+    assert not np.isnan(train_mat).any(), "NaNs in training matrix."
+    assert not np.isnan(train_behav).any(), "NaNs in training behavior."
+
     corr_train = [stats.pearsonr(train_behav, mat) for mat in train_mat]
     r_lst = np.array([c[0] for c in corr_train])
     p_lst = np.array([c[1] for c in corr_train])
     # check
-    logging.getLogger(MainGUI.log_handle()).info('Number of np.nan in r_lst: {}'.format(np.count_nonzero(np.isnan(r_lst))))
+    log.info('Number of np.nan in r_lst: {}'.format(np.count_nonzero(np.isnan(r_lst))))
 
     r_mat = np.zeros((num_nodes, num_nodes))
     p_mat = np.zeros((num_nodes, num_nodes))
@@ -47,12 +50,12 @@ def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear'):
     np.fill_diagonal(r_mat, np.nan)
     np.fill_diagonal(p_mat, np.nan)
 
-    logging.getLogger(MainGUI.log_handle()).info(">> Checking symmetry...")
+    log.info(">> Checking symmetry...")
     if check_symmetric(r_mat) and check_symmetric(p_mat):
-        logging.getLogger(MainGUI.log_handle()).info(">>> Passed.")
+        log.info(">>> Passed.")
     else:
-        logging.getLogger(MainGUI.log_handle()).error(">>> ERROR: r_mat or p_mat not symmetric. Please check your data.")
-        sys.exit(0)
+        log.error(">>> ERROR: r_mat or p_mat not symmetric. Please check your data.")
+        assert False, "r_mat or p_mat not symmetric. Please check your data."
 
     pos_edges = (r_mat > 0) & (p_mat < p_thresh)
     pos_edges = pos_edges.astype(int)
@@ -73,7 +76,7 @@ def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear'):
     num_total_edge = num_neg_edge + num_pos_edge
 
     if num_pos_edge != 0:  # if positive edges are identified
-        logging.getLogger(MainGUI.log_handle()).info(">> Found {} significant positive edges based on p threshold of {}".format(num_pos_edge, p_thresh))
+        log.info(">> Found {} significant positive edges based on p threshold of {}".format(num_pos_edge, p_thresh))
         if mode == 'linear':
             pos_estimator = LinearRegression(fit_intercept=True, normalize=False)
         elif mode == 'ridge':
@@ -81,15 +84,15 @@ def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear'):
         elif mode == 'logistic':
             pos_estimator = LogisticRegression()
         else:
-            logging.getLogger(MainGUI.log_handle()).error("ERROR: mode {} not implemented!".format(mode))
-            quit()
+            log.error("ERROR: mode {} not implemented!".format(mode))
+            assert False, "ERROR: mode {} not implemented!".format(mode)
         pos_estimator.fit(pos_sum.reshape(-1, 1), train_behav.reshape(-1, 1))  # reshape: num_subjects x num_features
     else:
-        logging.getLogger(MainGUI.log_handle()).warning(">> WARNING: Zero significant positive edges identified.")
+        log.warning(">> WARNING: Zero significant positive edges identified.")
         pos_estimator = np.nan
 
     if num_neg_edge != 0:  # if negative edges are identified
-        logging.getLogger(MainGUI.log_handle()).info(">> Found {} significant negative edges based on p threshold of {}".format(num_neg_edge, p_thresh))
+        log.info(">> Found {} significant negative edges based on p threshold of {}".format(num_neg_edge, p_thresh))
         if mode == 'linear':
             neg_estimator = LinearRegression(fit_intercept=True, normalize=False)
         elif mode == 'ridge':
@@ -97,15 +100,15 @@ def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear'):
         elif mode == 'logistic':
             neg_estimator = LogisticRegression()
         else:
-            logging.getLogger(MainGUI.log_handle()).error("ERROR: mode {} not implemented!".format(mode))
-            quit()
+            log.error("ERROR: mode {} not implemented!".format(mode))
+            assert False, "ERROR: mode {} not implemented!".format(mode)
         neg_estimator.fit(neg_sum.reshape(-1, 1), train_behav.reshape(-1, 1))
     else:
-        logging.getLogger(MainGUI.log_handle()).warning(">> WARNING: Zero significant negative edges identified.")
+        log.warning(">> WARNING: Zero significant negative edges identified.")
         neg_estimator = np.nan
 
     if num_total_edge != 0:  # if significant edges are identified
-        logging.getLogger(MainGUI.log_handle()).info(">> Found {} significant edges based on p threshold of {}".format(num_total_edge, p_thresh))
+        log.info(">> Found {} significant edges based on p threshold of {}".format(num_total_edge, p_thresh))
         if mode == 'linear':
             both_estimator = LinearRegression(fit_intercept=True, normalize=False)
         elif mode == 'ridge':
@@ -113,17 +116,17 @@ def train_cpm(train_mat, train_behav, num_nodes, p_thresh=0.05, mode='linear'):
         elif mode == 'logistic':
             both_estimator = LogisticRegression()
         else:
-            logging.getLogger(MainGUI.log_handle()).error("ERROR: mode {} not implemented!".format(mode))
-            quit()
+            log.error("ERROR: mode {} not implemented!".format(mode))
+            assert False, "ERROR: mode {} not implemented!".format(mode)
         both_estimator.fit(both.reshape(-1, 1), train_behav.reshape(-1, 1))
     else:
-        logging.getLogger(MainGUI.log_handle()).warning(">> WARNING: Zero significant edges identified.")
+        log.warning(">> WARNING: Zero significant edges identified.")
         both_estimator = np.nan
 
     return pos_estimator, neg_estimator, both_estimator, pos_edges, neg_edges
 
 
-def kfold_cpm(x, y, k, p_thresh=0.05, zscore=False, mode='linear'):
+def kfold_cpm(x, y, k, p_thresh=0.05, zscore=False, mode='linear', log=None):
     """
     Run CPM using k-fold cross-validation.
     :param x: stacked feature matrix of size (v, v, n) where v is the number of nodes, and n is the number of subjects.
@@ -192,7 +195,8 @@ def kfold_cpm(x, y, k, p_thresh=0.05, zscore=False, mode='linear'):
             train_mats = scaler.transform(train_mats.T).T
             test_mats = scaler.transform(test_mats.T).T
 
-        pos_estimator, neg_estimator, both_estimator, pos_edges, neg_edges = train_cpm(train_mats, train_behav, num_nodes, p_thresh, mode)
+        pos_estimator, neg_estimator, both_estimator, pos_edges, neg_edges = train_cpm(train_mats, train_behav,
+                                                                                       num_nodes, p_thresh, mode, log)
 
         edges_p.append(pos_edges)
         edges_n.append(neg_edges)
@@ -222,7 +226,7 @@ def kfold_cpm(x, y, k, p_thresh=0.05, zscore=False, mode='linear'):
     return y_pred_pos, y_pred_neg, y_pred_both, fit_p, fit_n, fit_b, edges_p, edges_n
 
 
-def run_cpm_thread(y, iter, x, k, out_path, p_thresh=0.05, zscore=False, mode='linear'):
+def run_cpm_thread(y, iter, x, k, out_path, logger_name, p_thresh=0.05, zscore=False, mode='linear'):
     """
     Called by run_cpm.py to run cpm in parallel. Do not change variable ordering or partial won't work.
     :param x: stacked feature matrix of size (v, v, n) where v is the number of nodes, and n is the number of subjects.
@@ -244,14 +248,15 @@ def run_cpm_thread(y, iter, x, k, out_path, p_thresh=0.05, zscore=False, mode='l
     :return: None
     :rtype: None
     """
-    logger = logging.getLogger(MainGUI.log_handle())
 
-    logger.info("---------------------------------------")
-    logger.info("Iteration #{}".format(iter))
-    logger.info("---------------------------------------")
+    logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+    log = logging.getLogger(logger_name)
+    log.info("---------------------------------------")
+    log.info("Iteration #{}".format(iter))
+    log.info("---------------------------------------")
     outputs = {}
     outputs['y_pred_pos'], outputs['y_pred_neg'], outputs['y_pred_both'], outputs['fit_p'], outputs['fit_n'], outputs[
-        'fit_b'], outputs['edges_p'], outputs['edges_n'] = kfold_cpm(x, y, k, p_thresh, zscore, mode)
-    save_run_outputs(out_path, iter, outputs, y, mode)
+        'fit_b'], outputs['edges_p'], outputs['edges_n'] = kfold_cpm(x, y, k, p_thresh, zscore, mode, log)
+    save_run_outputs(out_path, iter, outputs, y, mode, log)
     return None
 

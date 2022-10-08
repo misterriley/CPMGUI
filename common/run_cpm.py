@@ -1,28 +1,30 @@
-import logging
-
-from common.main_gui import MainGUI
-from CPM import cpm, utils
-from common.cpm_data import CPMData
-from multiprocessing import Pool
-from functools import partial
-import numpy as np
 import os
+from functools import partial
+from multiprocessing import Pool
+
+import numpy as np
+
+import cpm
+import utils
+from cpm_data import CPMData
 
 
 class CPMRunner:
     def __init__(self, cpm_data_):
         self.data = cpm_data_
 
-    def run(self):
+    def run(self, log):
         # read run settings and output run settings
+
         assert self.data.t is not None, 't is not specified'
         assert self.data.k is not None, 'k is not specified'
         assert self.data.p_thresh is not None, 'p_thresh is not specified'
         assert self.data.repeat is not None, 'repeat is not specified'
         assert self.data.num_iter is not None, 'num_iter is not specified'
 
-        assert self.data.x_mat_path is not None, 'x_mat_path is not specified'
-        assert self.data.x_mat_name is not None, 'x_mat_name is not specified'
+        assert self.data.x_mat_path is not None, 'Connectivity Matrices File is not specified'
+        assert self.data.x_mat_name is not None, 'Connectivity Matrices File is not specified'
+        assert self.data.y_mat_name is not None or self.data.y_name_in_mat is not None, 'Behavioral Data File is not specified'
 
         assert self.data.zscore is not None, 'zscore is not specified'
         assert self.data.mode is not None, 'mode is not specified'
@@ -46,7 +48,8 @@ class CPMRunner:
             f.write('y norm method: {}\n'.format(self.data.y_norm))
             f.write('Output path: {}\n'.format(self.data.get_out_path()))
 
-        x, y, lst_subjectkey = utils.read_matlab_mat(self.data)
+        x, y, lst_subjectkey = utils.read_matlab_mat(self.data, log)
+        assert x.shape[2] == y.shape[0], 'x ({}) and y ({}) have different number of subjects'.format(x.shape[2], y.shape[0])
         with open('{}/lst_subjkey_analyzed.txt'.format(self.data.get_out_path()), 'w') as f:
             for subj in lst_subjectkey:
                 f.write('{}\n'.format(subj))
@@ -63,10 +66,11 @@ class CPMRunner:
 
         num_proc = self.data.jobs
 
-        logging.getLogger(MainGUI.log_handle()).info("Using {} jobs".format(num_proc))
+        log.info("Using {} jobs".format(num_proc))
         pool = Pool(processes=num_proc)
         cpm_par = partial(cpm.run_cpm_thread, x=x, k=self.data.k, p_thresh=self.data.p_thresh,
-                          out_path=self.data.get_out_path(), zscore=self.data.zscore, mode=self.data.mode)
+                          out_path=self.data.get_out_path(), zscore=self.data.zscore, mode=self.data.mode,
+                          logger_name=self.data.log_name)
         pool.starmap(cpm_par, zip(lst_of_yrun, lst_of_i))
         pool.close()
         pool.join()

@@ -1,10 +1,10 @@
-import logging
 
 import numpy as np
 import pandas as pd
 import sys
 import scipy.io as sio
 import mat73
+from scipy.io.matlab.mio5_params import MatlabOpaque
 from sklearn.preprocessing import PowerTransformer, FunctionTransformer, StandardScaler
 
 
@@ -83,7 +83,7 @@ def save_run_outputs_subsample(out_path, iter_, outputs, y):
 
 
 # CURRENTLY NOT USED
-def y_transform(y, y_norm='id'):
+def y_transform(y, log, y_norm='id'):
     """
     normalize all behavioral data
     :param y: list of all behavioral data, (n_subj,)
@@ -109,7 +109,7 @@ def y_transform(y, y_norm='id'):
         transformer.fit(y)
         yn = transformer.transform(y)
     else:
-        logging.getLogger(MainGUI.log_handle()).warning("WARNING: undefined y_norm {}. Use identity function instead.".format(y_norm))
+        log.warning("WARNING: undefined y_norm {}. Use identity function instead.".format(y_norm))
         transformer = FunctionTransformer()  # identity function
         transformer.fit(y)
         yn = transformer.transform(y)
@@ -140,7 +140,7 @@ def save_matlab_mat(path, matname, x, y, lst_subj):
     return None
 
 
-def file_to_dict(directory, mat_txt_or_csv_file):
+def file_to_dict(directory, mat_txt_or_csv_file, log):
     """
     convert a .mat, .txt, or .csv file to a dictionary.
     :param mat_txt_or_csv_file: path to .mat, .txt, or .csv file.
@@ -162,24 +162,28 @@ def file_to_dict(directory, mat_txt_or_csv_file):
         return np.loadtxt(file)
     elif file.endswith('.csv'):
         return pd.read_csv(file)
+    elif file.endswith('.xlsx'):
+        return pd.read_excel(file)
     else:
-        logging.getLogger(MainGUI.log_handle()).warning("WARNING: file_to_dict only accepts .mat, .txt, or .csv files. {} is not supported.".format(
+        log.warning("WARNING: file_to_dict only accepts .mat, .txt, or .csv files. {} is not supported.".format(
             file.split('.')[-1]))
         return None
 
 
-def read_matlab_mat(cpm_data):
+def read_matlab_mat(cpm_data, log):
     """
     Read matlab .mat files and return x, y
     :param cpm_data: object containing CPM data
     :type cpm_data: CPMData object
+    :param log: logger for writing to log file
+    :type log: logging object
     :return:
         x: stacked feature matrix of size (v, v, n) where v is the number of nodes, and n is the number of subjects.
         y: true behavioral data of size (n,).
         lst_subjectkey: list of subject keys.
     :rtype: (NumPy Array, NumPy Array, list of strings)
     """
-    mdict_x = file_to_dict(cpm_data.x_mat_path, cpm_data.x_mat_name)
+    mdict_x = file_to_dict(cpm_data.x_mat_path, cpm_data.x_mat_name, log)
     if cpm_data.x_name_in_mat is None:
         keylist = list(mdict_x.keys())
         try:
@@ -198,23 +202,48 @@ def read_matlab_mat(cpm_data):
     else:
         x = mdict_x[cpm_data.x_name_in_mat]
 
+    if len(x.shape) == 4:
+        x = x[:, :, :, cpm_data.t - 1].squeeze()
+
     if cpm_data.y_mat_name is None:
         mdict_y = mdict_x
     else:
-        mdict_y = file_to_dict(cpm_data.y_mat_path, cpm_data.y_mat_name)
+        mdict_y = file_to_dict(cpm_data.y_mat_path, cpm_data.y_mat_name, log)
 
     if cpm_data.y_name_in_mat is None:
         y = mdict_y
+        if isinstance(y, dict):
+            keylist = list(y.keys())
+            try:
+                keylist.remove('__header__')
+                keylist.remove('__version__')
+                keylist.remove('__globals__')
+                keylist.remove('__function_workspace__')
+            except ValueError:
+                # one or more of these isn't here
+                pass
+
+            assert len(keylist) == 1, "y_name_in_mat is not specified and there are multiple variables in this file. "
+            "Please specify the name of the variable in the .mat file."
+            y = y[keylist[0]]
+            assert not isinstance(y, MatlabOpaque), "python cannot read this type of file. Please save without class information or convert to .csv or .txt."
+        elif isinstance(y, pd.DataFrame):
+            y = y.values
+            assert y.shape[1] == 1, "y_name_in_mat is not specified and there are multiple variables in this file. "
     else:
+        assert cpm_data.y_name_in_mat in mdict_y.keys(), "y_name_in_mat is not in the .mat file."
         y = mdict_y[cpm_data.y_name_in_mat]
 
+    assert y is not None, "no behavioral data found."
     if len(y.shape) > 1:
         y = y.squeeze()
+
+    assert not any([isinstance(y_val, str) for y_val in y]), "y contains strings. Please convert to numbers."
 
     if cpm_data.subj_key_mat_name is None:
         mdict_subj = mdict_x
     else:
-        mdict_subj = file_to_dict(cpm_data.subj_key_mat_path, cpm_data.subj_key_mat_name)
+        mdict_subj = file_to_dict(cpm_data.subj_key_mat_path, cpm_data.subj_key_mat_name, log)
 
     if cpm_data.subj_key_name_in_mat is None:
         lst_subjectkey = [str(x) for x in range(1, y.shape[0] + 1)]
@@ -279,7 +308,7 @@ def read_mats(fn_list):
     return fn_mats
 
 
-def return_estimator_coef(est, mode):
+def return_estimator_coef(est, mode, log):
     """
     Return coefficients of an estimator.
     :param est: trained estimator
@@ -300,11 +329,11 @@ def return_estimator_coef(est, mode):
         else:
             return [est.best_estimator_.coef_[0][0], est.best_estimator_.intercept_[0], est.best_params_['alpha']]
     else:
-        logging.getLogger(MainGUI.log_handle()).error("ERROR: mode {} not implemented!".format(mode))
-        quit()
+        log.error("ERROR: mode {} not implemented!".format(mode))
+        assert False, "ERROR: mode {} not implemented!".format(mode)
 
 
-def save_run_outputs(out_path, iter_, outputs, y_run, mode='linear'):
+def save_run_outputs(out_path, iter_, outputs, y_run, mode='linear', log=None):
     """
     Save k-fold CPM outputs.
     :param out_path: output directory.
@@ -335,16 +364,16 @@ def save_run_outputs(out_path, iter_, outputs, y_run, mode='linear'):
 
     df_fit = pd.DataFrame(columns=['pos_m', 'pos_b', 'neg_m', 'neg_b', 'both_m', 'both_b'],
                           index=['fold {}'.format(x + 1) for x in range(len(outputs['fit_p']))])
-    df_fit['pos_m'] = [return_estimator_coef(fit, mode)[0] for fit in outputs['fit_p']]
-    df_fit['pos_b'] = [return_estimator_coef(fit, mode)[1] for fit in outputs['fit_p']]
-    df_fit['neg_m'] = [return_estimator_coef(fit, mode)[0] for fit in outputs['fit_n']]
-    df_fit['neg_b'] = [return_estimator_coef(fit, mode)[1] for fit in outputs['fit_n']]
-    df_fit['both_m'] = [return_estimator_coef(fit, mode)[0] for fit in outputs['fit_b']]
-    df_fit['both_b'] = [return_estimator_coef(fit, mode)[1] for fit in outputs['fit_b']]
+    df_fit['pos_m'] = [return_estimator_coef(fit, mode, log)[0] for fit in outputs['fit_p']]
+    df_fit['pos_b'] = [return_estimator_coef(fit, mode, log)[1] for fit in outputs['fit_p']]
+    df_fit['neg_m'] = [return_estimator_coef(fit, mode, log)[0] for fit in outputs['fit_n']]
+    df_fit['neg_b'] = [return_estimator_coef(fit, mode, log)[1] for fit in outputs['fit_n']]
+    df_fit['both_m'] = [return_estimator_coef(fit, mode, log)[0] for fit in outputs['fit_b']]
+    df_fit['both_b'] = [return_estimator_coef(fit, mode, log)[1] for fit in outputs['fit_b']]
     if mode == 'ridge':
-        df_fit['pos_alpha'] = [return_estimator_coef(fit, mode)[2] for fit in outputs['fit_p']]
-        df_fit['neg_alpha'] = [return_estimator_coef(fit, mode)[2] for fit in outputs['fit_n']]
-        df_fit['both_alpha'] = [return_estimator_coef(fit, mode)[2] for fit in outputs['fit_b']]
+        df_fit['pos_alpha'] = [return_estimator_coef(fit, mode, log)[2] for fit in outputs['fit_p']]
+        df_fit['neg_alpha'] = [return_estimator_coef(fit, mode, log)[2] for fit in outputs['fit_n']]
+        df_fit['both_alpha'] = [return_estimator_coef(fit, mode, log)[2] for fit in outputs['fit_b']]
     df_fit.to_csv('{}/fit_parameters_iter{}.csv'.format(out_path, iter_))
 
     return None

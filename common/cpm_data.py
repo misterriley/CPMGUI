@@ -1,15 +1,16 @@
 import multiprocessing
-
 from datetime import datetime
+
 
 class CPMData:
     """
     Store data relevant to running a CPM analysis
     """
-    def __init__(self, t=1, k=10, p_thresh=0.05, repeat=100, num_iter=100, x_mat_path=None, x_mat_name=None,
+
+    def __init__(self, log_name, t=1, k=10, p_thresh=0.05, repeat=100, num_iter=100, x_mat_path=None, x_mat_name=None,
                  x_name_in_mat='x', y_mat_path=None, y_mat_name=None, y_name_in_mat=None, subj_key_mat_path=None,
                  subj_key_mat_name=None, subj_key_name_in_mat=None, zscore=False, mode='linear', y_norm=None,
-                 base_dir='./output', jobs=max(1, multiprocessing.cpu_count()-2)):
+                 base_dir='./output', jobs=max(1, multiprocessing.cpu_count() - 2)):
         """
         :param t: timepoint to run CPM on
         :param k: folds in cross-validation
@@ -33,6 +34,7 @@ class CPMData:
         :param base_dir: where to save output
         :param jobs: number of parallel workers to use (defaults to 2 less than the number of available cores)
         """
+
         self.t = t
         self.k = k
         self.p_thresh = p_thresh
@@ -57,8 +59,17 @@ class CPMData:
         self.base_dir = base_dir
         self.jobs = jobs
         self.today_date = datetime.today().strftime('%Y-%m-%d')
+        self.log_name = log_name
 
     def get_out_path(self):
         return '{}/{}_{}fold_p_thresh_{}_repeat{}_iter{}_timepoint_{}_z{}_mode_{}_mat_{}'.format(
             self.base_dir, self.today_date, self.k, self.p_thresh, self.repeat, self.num_iter, self.t, int(self.zscore),
             self.mode, self.x_mat_name[:-4])
+
+    def get_summary(self):
+        return 'Folds\t\t{}\nP threshold\t{}\nRepeats\t\t{}\nPermuted repeats\t{}\nTimepoint\t{}\nZscore?\t\t{}\nMode\t\t{}\n' \
+               'X file\t\t{}\nX variable\t{}\nY file\t\t{}\nY variable\t{}\nID file\t\t{}\nID variable\t{}\nOutput dir\t{}\n' \
+               'Parallel jobs\t{}'.format(
+            self.k, self.p_thresh, self.repeat, self.num_iter, self.t, self.zscore, self.mode,
+            self.x_mat_name, self.x_name_in_mat, self.y_mat_name, self.y_name_in_mat, self.subj_key_mat_name,
+            self.subj_key_name_in_mat, self.base_dir, self.jobs)

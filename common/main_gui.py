@@ -1,23 +1,23 @@
 import multiprocessing
 import os.path
-import logging
 import traceback
-import time
 
 from PyQt5.QtWidgets import QMainWindow, QTableWidget, QWidget, QVBoxLayout, QTabWidget, QFormLayout, \
-    QGridLayout, QPushButton, QLineEdit, QCheckBox, QComboBox, QLabel, QFileDialog, QDialogButtonBox, QMessageBox
+    QGridLayout, QPushButton, QLineEdit, QCheckBox, QComboBox, QLabel, QFileDialog, QMessageBox, \
+    QTextBrowser
 
-from CPM.run_cpm import CPMRunner
-from common.cpm_data import CPMData
+from run_cpm import CPMRunner
+from cpm_data import CPMData
 
 last_file_path = None
+auto_run = False
 
 
 def get_text_from_object(obj):
     if obj.text() == '':
         return None
     else:
-        return obj.text()
+        return obj.text().strip()
 
 
 def get_int_from_object(obj, object_descriptor):
@@ -32,28 +32,31 @@ def get_int_from_object(obj, object_descriptor):
 
 class MainGUI(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, log):
         super().__init__()
         if not os.path.exists("logs"):
             os.makedirs("logs")
-        logging.basicConfig(filename=f"logs\\CPMGUI_{int(time.time())}.log")
-        logging.root.setLevel(logging.NOTSET)
-        logging.getLogger(MainGUI.log_handle()).info("Starting CPM GUI")
+
         self.setWindowTitle("CPM GUI")
-        self.setGeometry(100, 100, 1200, 500)
+        self.setGeometry(100, 100, 485, 300)
 
         self.cw = CentralWidget(self)
         self.setCentralWidget(self.cw)
         self.show()
         self.run_actually = False
+        self.log = log
+        self.set_default_values()
 
-    @staticmethod
-    def log_handle():
-        return "CPMGUI_log"
+    def set_default_values(self):
+        pass
 
-    def show_run_check_dialog(self):
+    def show_run_check_dialog(self, cpm_data):
+        global auto_run
+        if auto_run:
+            self.run_actually = True
+            return
         dialog = QMessageBox(self)
-        dialog.setText("Are you sure you want to run CPM with these settings?")
+        dialog.setText("Run CPM with these settings?\n" + cpm_data.get_summary())
         dialog.setIcon(QMessageBox.Question)
         dialog.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         dialog.buttonClicked.connect(self.dialog_clicked)
@@ -63,11 +66,13 @@ class MainGUI(QMainWindow):
         self.run_actually = button.text() == "OK"
 
     def run(self):
+        self.cw.run_tab.run_button.setText("Running...")
+        self.cw.run_tab.run_button.setEnabled(False)
+        self.cw.run_tab.run_button.repaint()
+
         try:
-            self.show_run_check_dialog()
-            if not self.run_actually:
-                return
-            cpm_data = CPMData(t=self.cw.get_t(), k=self.cw.get_k(), p_thresh=self.cw.get_p_thresh(),
+            cpm_data = CPMData(t=self.cw.get_t(), log_name=self.log.name, k=self.cw.get_k(),
+                               p_thresh=self.cw.get_p_thresh(),
                                repeat=self.cw.get_num_repeats(), num_iter=self.cw.get_num_permuted_repeats(),
                                x_mat_path=self.cw.get_x_mat_path(), x_mat_name=self.cw.get_x_mat_name(),
                                x_name_in_mat=self.cw.get_x_name_in_mat(),
@@ -78,13 +83,31 @@ class MainGUI(QMainWindow):
                                subj_key_name_in_mat=self.cw.get_subject_key_name_in_mat(),
                                zscore=self.cw.get_zscore(),
                                mode=self.cw.get_mode(), base_dir=self.cw.get_base_dir(), jobs=self.cw.get_jobs())
+            self.show_run_check_dialog(cpm_data)
+            if not self.run_actually:
+                return
             cpm_runner = CPMRunner(cpm_data)
-            cpm_runner.run()
-
+            cpm_runner.run(self.log)
+            self.show_message_dialog("CPM run complete. Check most recent log for details. "
+                                     "Files saved to {}".format(os.path.abspath(cpm_data.get_out_path())))
+        except AssertionError as e:
+            self.show_message_dialog("Unable to run CPM: " + e.args[0], QMessageBox.Critical)
         except Exception as e:
-            logging.getLogger(MainGUI.log_handle()).error(traceback.format_exc())
+            self.show_message_dialog("Unable to run CPM due to unexpected Exception. "
+                                     "Please check most recent log file. Shutting down.", QMessageBox.Critical)
+            self.log.error(traceback.format_exc())
             print(traceback.format_exc())
             raise e
+        finally:
+            self.cw.run_tab.run_button.setText("Run")
+            self.cw.run_tab.run_button.setEnabled(True)
+
+    def show_message_dialog(self, message, icon=QMessageBox.Information):
+        dialog = QMessageBox(self)
+        dialog.setText(message)
+        dialog.setIcon(icon)
+        dialog.setStandardButtons(QMessageBox.Ok)
+        dialog.exec_()
 
 
 class InputTab(QWidget):
@@ -94,12 +117,12 @@ class InputTab(QWidget):
         self.setLayout(self.layout)
 
         self.x_row = FileSelectRow(self, 0, "Connectivity Matrices File:",
-                                   "Connectivity Matrices Variable Name (Leave blank if only one variable in file):", "")
+                                   "Connectivity Matrices Variable Name:", "")
         self.y_row = FileSelectRow(self, 2,
-                                   "Behavioral Data File (Leave blank if the same as connectivity matrices file):",
-                                   "Behavioral Variable Name (Leave blank if the column has no header):", "")
-        self.subj_key_row = FileSelectRow(self, 4, "Subject Key File (Leave blank if unknown):",
-                                          "Subject Key Variable Name (Leave blank if unknown):", "")
+                                   "Behavioral Data File:",
+                                   "Behavioral Variable Name:", "")
+        self.subj_key_row = FileSelectRow(self, 4, "Subject Key File:",
+                                          "Subject Key Variable Name:", "")
 
         self.add_row(self.x_row)
         self.add_row(self.y_row)
@@ -153,6 +176,9 @@ class FileSelectRow(QWidget):
 
     def get_file_path(self):
         text = get_text_from_object(self.file_label)
+        if text is None or text == "None":
+            return None
+
         if os.path.isdir(text):
             return text
         else:
@@ -163,12 +189,14 @@ class FileSelectRow(QWidget):
         if last_file_path is None:
             last_file_path = "."
         fname = QFileDialog.getOpenFileName(self, 'Open file',
-                                            last_file_path, "CPM Data Files (*.csv *.txt *.mat)")
+                                            last_file_path, "CPM Data Files (*.xlsx *.csv *.txt *.mat)")
         self.file_label.setText(fname[0])
         last_file_path = os.path.dirname(fname[0])
 
     def get_mat_name(self):
         text = get_text_from_object(self.file_label)
+        if text is None or text == "None":
+            return None
         return os.path.basename(text)
 
     def get_var_name(self):
@@ -199,7 +227,7 @@ class ParametersTab(QWidget):
         self.zscore_checkbox = QCheckBox()
         self.mode_combo_box = QComboBox()
         self.mode_combo_box.addItems(["linear", "ridge", "logistic"])
-        self.jobs_line_edit = QLineEdit(str(multiprocessing.cpu_count() - 2))
+        self.jobs_line_edit = QLineEdit(str(max(1, int(multiprocessing.cpu_count() / 3))))
 
         self.layout.addRow("Time index:", self.t_line_edit)
         self.layout.addRow("K folds", self.k_folds_line_edit)
@@ -270,6 +298,17 @@ class RunTab(QWidget):
         self.main_gui.run()
 
 
+class DocumentationTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        self.setLayout(self.layout)
+        self.text_browser = QTextBrowser()
+        self.layout.addWidget(self.text_browser)
+        with open("documentation.html", "r") as f:
+            self.text_browser.setHtml(f.read())
+
+
 class CentralWidget(QTableWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -279,11 +318,14 @@ class CentralWidget(QTableWidget):
         self.input_tab = InputTab(self)
         self.params_tab = ParametersTab(self)
         self.outputs_tab = OutputsTab(self)
+        self.run_tab = RunTab(self, parent)
+        self.documentation_tab = DocumentationTab()
 
         self.tabs.addTab(self.input_tab, "Inputs")
         self.tabs.addTab(self.params_tab, "Parameters")
         self.tabs.addTab(self.outputs_tab, "Outputs")
-        self.tabs.addTab(RunTab(self, parent), "Run")
+        self.tabs.addTab(self.run_tab, "Run")
+        self.tabs.addTab(self.documentation_tab, "Documentation")
         self.layout.addWidget(self.tabs)
 
     def get_t(self):
