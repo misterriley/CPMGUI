@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QMainWindow, QTableWidget, QWidget, QVBoxLayout, QTa
 
 from run_cpm import CPMRunner
 from cpm_data import CPMData
+import documentation
 
 last_file_path = None
 auto_run = False
@@ -305,8 +306,7 @@ class DocumentationTab(QWidget):
         self.setLayout(self.layout)
         self.text_browser = QTextBrowser()
         self.layout.addWidget(self.text_browser)
-        with open("documentation.html", "r") as f:
-            self.text_browser.setHtml(f.read())
+        self.text_browser.setHtml(documentation.documentation)
 
 
 class CentralWidget(QTableWidget):
